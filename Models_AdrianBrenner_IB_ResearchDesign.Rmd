@@ -1,0 +1,127 @@
+---
+title: "Models_AdrianBrenner_IB_ResearchDesign"
+author: "Adrian Brenner"
+date: "2023-12-13"
+output: 
+  pdf_document:
+    toc: false
+    number_sections: false
+    latex_engine: pdflatex
+---
+
+```{r}
+# This is the code for importing and cleaning the chosen Datasets.
+
+if (!requireNamespace("readxl", quietly = TRUE)) {
+  install.packages("readxl")
+}
+library(readxl)
+
+xlsx_file <- "C:/Users/AD/Desktop/data/BattleDeaths_v23_1.xlsx"
+
+
+data <- read_xlsx(xlsx_file)
+
+# In the first cleaning step i removed all conflict, not taking place in region = 4 (Africa)
+new_data <- data[data$region == 4, ]
+
+# The second step involves removing all cases where there is only one belligerent on the second side, therefore not being supported by anyone else. Here the gwno classification is used, as it only picks up "real" countries in form of their country code. This will both be done for each warring side (in this Dataset represented by either side a or b).
+
+cleaned_data <- new_data[complete.cases(new_data$gwno_b_2nd), ]
+
+cleaned_data_2 <- new_data[complete.cases(new_data$gwno_a_2nd), ]
+
+# The third step is to combine both data sets into one and remove the duplicates.
+
+library(dplyr)
+
+# Assuming 'cleaned_data' and 'cleaned_data_2' are your datasets
+# Combine the datasets and remove duplicates
+combined_data <- bind_rows(cleaned_data, cleaned_data_2) %>%
+  distinct()
+
+#The final Dataset cleaned for the linear regression model of 4.2.1 now contains 238 distinct cases. I argue that I can proceed, as these are enough occurrences of foreign state intervention in conflict.
+
+#TO create the opposite Dataset (the one with no intervention) I just subtract the combined_data from the starting data Dataset
+rest_data <- anti_join(data, combined_data)
+```
+
+
+
+```{r}
+# In this next step I will create the regression model to include the battle related Deaths count of the combined_data Dataset in contrast to the count of the rest Dataset (no occurrence of classified state intervention).
+
+# Assuming 'rest_data' and 'combined_data' are your datasets
+# Assuming 'Battle_Related_Deaths' is the dependent variable
+
+# Create a binary predictor variable
+predictor_variable <- rep(c(0, 1), c(nrow(rest_data), nrow(combined_data)))
+
+# Combine the datasets
+all_data <- bind_rows(rest_data, combined_data)
+
+# Create a linear regression model
+model <- lm(bd_best ~ as.factor(predictor_variable), data = all_data)
+
+# Plot the linear regression model
+plot(all_data$bd_best ~ as.factor(predictor_variable),
+     xlab = "Foreign State Involvement (Binary)",
+     ylab = "Battle Related Deaths",
+     main = "Linear Regression Model")
+
+# Add the regression line to the plot
+abline(model, col = "blue")
+
+# I now extrace its coefficients, slope and intercept.
+
+# Get coefficients of the linear regression model
+coefficients <- coef(model)
+
+# Extract slope and intercept
+slope <- coefficients[2]  # Coefficient for the predictor variable
+intercept <- coefficients[1]  # Intercept term
+
+# Print the results
+cat("Slope:", slope, "\n")
+cat("Intercept:", intercept, "\n")
+
+
+
+```
+
+
+```{r}
+summary(model)
+```
+
+
+
+```{r}
+
+# T-test for the coefficient of the predictor variable
+t_test <- summary(model)$coefficients["as.factor(predictor_variable)1", "t value"]
+
+# Print the t-test result
+cat("T-test for the coefficient of the predictor variable:", t_test, "\n")
+
+```
+```{r}
+# Extracting the residual standard error
+residual_standard_error <- summary(model)$sigma
+
+# Degrees of freedom
+df <- length(model$coefficients) - 1  # Subtract 1 for the intercept term
+
+# Chi-square test statistic
+chi_square <- (t_test^2) / residual_standard_error^2
+
+# P-value for chi-square test
+p_value_chi_square <- 1 - pchisq(chi_square, df)
+
+# Print the chi-square test results
+cat("Chi-square test statistic:", chi_square, "\n")
+cat("Degrees of freedom:", df, "\n")
+cat("P-value for chi-square test:", p_value_chi_square, "\n")
+
+```
+Adrian Brenner (12422308) for GSI LMU - IB Research Design (15103) - Dr. Oliver Pamp
